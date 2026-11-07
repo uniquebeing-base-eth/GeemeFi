@@ -8,6 +8,7 @@ import {
 import {
   BountiesPage, ExplorePage, FeedPage, LearnPage, NotificationsPage, ProfilePage, PublicProfilePage, WalletPage,
 } from './pages/Pages.tsx';
+import { WalletSetupPage } from './pages/WalletSetupPage.tsx';
 
 export function App() {
   return (
@@ -24,6 +25,7 @@ export function App() {
           <Route path="/profile/:username" element={<PublicProfilePage />} />
         </Route>
         <Route element={<ProtectedApp />}>
+          <Route path="/wallet/setup" element={<WalletSetupPage />} />
           <Route element={<AppShell />}>
             <Route path="/" element={<Navigate to="/feed" replace />} />
             <Route path="/feed" element={<FeedPage />} />
@@ -60,5 +62,9 @@ function ProtectedApp() {
 
   if (loading) return <div className="full-loading"><span className="loading-orbit" /><span>Getting your Geemifi ready…</span></div>;
   if (!user) return <Navigate to={`/signin?next=${encodeURIComponent(location.pathname)}`} replace />;
+  if (user.accountStatus !== 'active' && location.pathname !== '/wallet/setup') {
+    return <Navigate to={`/wallet/setup?next=${encodeURIComponent(location.pathname)}`} replace />;
+  }
+  if (user.accountStatus === 'active' && location.pathname === '/wallet/setup') return <Navigate to="/" replace />;
   return <Outlet />;
 }

@@ -15,7 +15,7 @@ npm run dev
 
 Set `DATABASE_URL` in `.env` to a PostgreSQL database you control. The legacy SQLite database is not modified or removed by the application. To copy it to a new, empty PostgreSQL database, set `SQLITE_SOURCE_PATH` and run `npm run db:migrate:sqlite`. This command makes a consistent SQLite backup (including committed WAL data) before copying records, and refuses to merge into populated PostgreSQL tables.
 
-Open [http://localhost:5173](http://localhost:5173). Create an account, edit your profile and explore the application.
+Open [http://localhost:5173](http://localhost:5173). Create an account, verify your email, and Geemifi will provision an embedded smart wallet for you on Celo Sepolia.
 
 ```sh
 npm test       # API integration test (requires TEST_DATABASE_URL or DATABASE_URL)
@@ -30,7 +30,7 @@ NODE_ENV=production npm run build
 NODE_ENV=production npm start
 ```
 
-Set `PORT`, `DATABASE_URL`, `RESEND_API_KEY`, `EMAIL_FROM`, and `APP_BASE_URL` in the deployment environment. Apply schema updates with `npm run db:migrate` using a migration-capable database role; run the app with a least-privilege PostgreSQL role. Terminate TLS at the host or trusted proxy.
+Set `PORT`, `DATABASE_URL`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_BASE_URL`, `THIRDWEB_CLIENT_ID`, and `THIRDWEB_WALLET_SECRET` in the deployment environment. `THIRDWEB_WALLET_SECRET` must be a random secret of at least 32 bytes and must remain server-side; it deterministically derives provider credentials per Geemifi user. Apply schema updates with `npm run db:migrate` using a migration-capable database role; run the app with a least-privilege PostgreSQL role. Terminate TLS at the host or trusted proxy.
 
 ## What works
 
@@ -41,6 +41,9 @@ Set `PORT`, `DATABASE_URL`, `RESEND_API_KEY`, `EMAIL_FROM`, and `APP_BASE_URL` i
 - Discoverable member search and public profiles that omit email and wallet identifiers.
 - Responsive application shell, working navigation, loading/error/empty states, and branded Phase 1 previews for later modules.
 - Wallet summary backed by server-owned database values. New accounts start at zero; no client-supplied balance or allowance is accepted.
+- Server-provisioned Thirdweb ERC-4337 smart wallets on Celo Sepolia, linked to the Geemifi user ID. Provisioning is idempotent and does not require an external wallet or signing UI.
+- Email verification, GoodDollar identity status and smart-wallet provisioning have independent state.
+- GoodDollar Citizen SDK adapter boundary and a non-production mock identity provider. Real GoodDollar identity calls and all G$ balance/transfer operations remain disabled until a Celo Sepolia deployment is independently verified.
 - Versioned, transactional PostgreSQL migrations for users, settings, sessions, social infrastructure, notifications, wallet records, moderation reports and audit logs.
 
 ## Project layout
@@ -66,6 +69,7 @@ docs/                    Architecture and implementation boundaries
 ```
 
 See [docs/architecture.md](docs/architecture.md) for module responsibilities, data boundaries and future integration points.
+See [docs/blockchain-phase.md](docs/blockchain-phase.md) for wallet security, testnet boundaries, GoodDollar limitations and the production migration checklist.
 
 ## Architecture and security notes
 
@@ -75,7 +79,7 @@ The auth rate limiter is process-local and intended as a basic foundation only; 
 
 ## Not included yet
 
-- Embedded smart-wallet provisioning, GoodDollar identity verification and on-chain G$ transfers are not implemented yet.
+- Real GoodDollar identity verification, G$ balances, transfers and transaction monitoring are not enabled. The installed Citizen SDK supports Celo mainnet (42220), Fuse and XDC; it does not list Celo Sepolia (11142220), so its `development`/`staging` environments are not treated as Sepolia.
 - Feed posts, media uploads, follows, likes, comments, notifications and moderation workflows have schema foundations only.
 - Gifts, bounty funding/settlement, courses, certificates and tutor applications are not active.
 - Admin role data is modeled, but there is no admin UI or administrative API.

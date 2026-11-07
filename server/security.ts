@@ -15,6 +15,9 @@ export type AuthenticatedUser = {
   avatarUrl: string | null;
   bio: string;
   walletAddress: string | null;
+  emailVerified: boolean;
+  walletProvisioningStatus: 'pending' | 'provisioning' | 'provisioned' | 'failed';
+  accountStatus: 'pending_email_verification' | 'email_verified' | 'wallet_provisioning' | 'wallet_provisioning_failed' | 'active' | 'suspended';
   status: string;
   role: string;
   verificationStatus: string;
@@ -29,6 +32,9 @@ type UserRow = {
   avatar_url: string | null;
   bio: string;
   wallet_address: string | null;
+  email_verified_at: Date | string | null;
+  wallet_provisioning_status: 'pending' | 'provisioning' | 'provisioned' | 'failed';
+  account_status: 'pending_email_verification' | 'email_verified' | 'wallet_provisioning' | 'wallet_provisioning_failed' | 'active';
   status: string;
   role: string;
   verification_status: string;
@@ -36,6 +42,8 @@ type UserRow = {
 };
 
 export function publicUser(row: UserRow): AuthenticatedUser {
+  const walletProvisioningStatus = row.wallet_provisioning_status ?? 'pending';
+  const accountStatus = row.status === 'active' ? row.account_status : 'suspended';
   return {
     id: row.id,
     username: row.username,
@@ -44,11 +52,25 @@ export function publicUser(row: UserRow): AuthenticatedUser {
     avatarUrl: row.avatar_url,
     bio: row.bio,
     walletAddress: row.wallet_address,
+    emailVerified: Boolean(row.email_verified_at),
+    walletProvisioningStatus,
+    accountStatus,
     status: row.status,
     role: row.role,
     verificationStatus: row.verification_status,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
   };
+}
+
+export async function loadPublicUser(database: AppDatabase, userId: string): Promise<AuthenticatedUser | null> {
+  const { rows } = await database.withUser(userId, (client) => client.query<UserRow>(`
+    SELECT users.*, wallet_accounts.smart_wallet_address AS wallet_address,
+      wallet_accounts.provisioning_status AS wallet_provisioning_status
+    FROM users
+    LEFT JOIN wallet_accounts ON wallet_accounts.user_id = users.id
+    WHERE users.id = $1
+  `, [userId]));
+  return rows[0] ? publicUser(rows[0]) : null;
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -107,9 +129,12 @@ export function optionalAuthentication(database: AppDatabase) {
         const { rows } = await database.query<UserRow>(`
         SELECT users.* FROM sessions
         JOIN users ON users.id = sessions.user_id
-        WHERE sessions.id_hash = $1 AND sessions.expires_at > $2 AND users.status = 'active'
+        WHERE sessions.id_hash = $1 AND sessions.expires_at > $2
+          AND users.status = 'active' AND users.email_verified_at IS NOT NULL
       `, [hashSessionToken(token), new Date()]);
-        if (rows[0]) response.locals.user = publicUser(rows[0]);
+        if (rows[0]) {
+          response.locals.user = await loadPublicUser(database, rows[0].id);
+        }
       } catch (error) {
         next(error);
         return;
@@ -122,6 +147,18 @@ export function optionalAuthentication(database: AppDatabase) {
 export function requireAuthentication(_request: Request, response: Response, next: NextFunction): void {
   if (!response.locals.user) {
     response.status(401).json({ error: 'Please sign in to continue.' });
+    return;
+  }
+  next();
+}
+
+export function requireActiveAccount(_request: Request, response: Response, next: NextFunction): void {
+  const user = response.locals.user as AuthenticatedUser | undefined;
+  if (!user || user.accountStatus !== 'active') {
+    response.status(403).json({
+      error: 'Complete email verification and wallet provisioning before using Geemifi.',
+      accountStatus: user?.accountStatus ?? 'pending_email_verification',
+    });
     return;
   }
   next();

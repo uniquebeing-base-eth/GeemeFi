@@ -295,6 +295,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .academy-note { display: flex; align-items: center; gap: 9px; padding: 12px 13px; border: 1px solid #e8dfef; border-radius: 12px; background: #fff; color: #726a7b; font-size: 10px; }
 .academy-note svg { flex: 0 0 auto; color: #6944ad; }
 
+.wallet-setup-status { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 18px 0; color: #696170; font-size: 12px; }
+.wallet-setup-note, .wallet-setup-network { display: block; color: #817987; font-size: 11px; line-height: 1.55; }
+.wallet-setup-note { margin: 12px 0 0; }
+.wallet-setup-network { margin-top: 16px; }
+.wallet-signout { border: 0; background: transparent; color: var(--violet); font-size: 11px; font-weight: 600; cursor: pointer; }
 .wallet-main-card { padding: 20px 21px 17px; border: 1px solid #ede2bf; border-radius: 18px; background: linear-gradient(135deg, #fffdf5, #fff5d9); }
 .wallet-main-label { display: flex; align-items: center; gap: 9px; color: #887b59; font-size: 9px; font-weight: 700; }
 .wallet-main-label .wallet-icon { box-shadow: 0 2px 5px #7f5a1611; }

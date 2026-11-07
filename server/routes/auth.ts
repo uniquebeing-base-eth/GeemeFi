@@ -2,14 +2,15 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import type { AppDatabase } from '../db.ts';
+import { provisionEmbeddedWallet, type WalletProvisioner } from '../embedded-wallet.ts';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../email.ts';
 import {
   clearSessionCookie,
   createSession,
   hashPassword,
   hashSessionToken,
+  loadPublicUser,
   optionalAuthentication,
-  publicUser,
   removeSession,
   sameOrigin,
   setSessionCookie,
@@ -40,12 +41,13 @@ type AuthRouterOptions = {
     sendVerification: typeof sendVerificationEmail;
     sendPasswordReset: typeof sendPasswordResetEmail;
   };
+  provisionWallet?: WalletProvisioner;
 };
 
 export function createAuthRouter({ database, email = {
   sendVerification: sendVerificationEmail,
   sendPasswordReset: sendPasswordResetEmail,
-} }: AuthRouterOptions): Router {
+}, provisionWallet }: AuthRouterOptions): Router {
   const router = Router();
   const attempts = new Map<string, { count: number; resetAt: number }>();
   router.use(sameOrigin);
@@ -139,7 +141,12 @@ export function createAuthRouter({ database, email = {
     }
 
     setSessionCookie(response, await createSession(database, row.id));
-    response.json({ user: publicUser(row) });
+    const user = await loadPublicUser(database, row.id);
+    if (!user) {
+      response.status(500).json({ error: 'Your account could not be loaded. Please try signing in again.' });
+      return;
+    }
+    response.json({ user });
   });
 
   router.post('/verify-email', async (request, response) => {
@@ -148,23 +155,36 @@ export function createAuthRouter({ database, email = {
       response.status(400).json({ error: 'This verification link is invalid or expired.' });
       return;
     }
-    const verified = await database.transaction(async (client) => {
+    const userId = await database.transaction(async (client) => {
       const { rows } = await client.query<{ user_id: string }>(`DELETE FROM email_verification_tokens
         WHERE token_hash = $1 AND expires_at > now() RETURNING user_id`,
       [hashSessionToken(parsed.data.token)]);
-      if (!rows[0]) return false;
-      await client.query('UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE id = $1',
+      if (!rows[0]) return null;
+      await client.query(`UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()),
+        account_status = 'email_verified' WHERE id = $1`,
         [rows[0].user_id]);
       await client.query(`INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id)
         VALUES ($1, $2, $3, $4, $5)`,
       [randomUUID(), rows[0].user_id, 'account.email_verified', 'user', rows[0].user_id]);
-      return true;
+      return rows[0].user_id;
     });
-    if (!verified) {
+    if (!userId) {
       response.status(400).json({ error: 'This verification link is invalid or expired.' });
       return;
     }
-    response.json({ ok: true });
+    try {
+      await provisionEmbeddedWallet(database, userId, provisionWallet);
+    } catch (error) {
+      console.error('Embedded smart-wallet provisioning failed after email verification.',
+        error instanceof Error ? error.message : 'Unknown error.');
+    }
+    setSessionCookie(response, await createSession(database, userId));
+    const user = await loadPublicUser(database, userId);
+    if (!user) {
+      response.status(500).json({ error: 'Your account could not be loaded. Please try signing in again.' });
+      return;
+    }
+    response.json({ ok: true, user });
   });
 
   router.post('/resend-verification', async (request, response) => {

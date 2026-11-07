@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import type { AppDatabase } from '../db.ts';
-import { optionalAuthentication, requireAuthentication, sameOrigin, userFromResponse } from '../security.ts';
+import {
+  optionalAuthentication, requireActiveAccount, requireAuthentication, sameOrigin, userFromResponse,
+} from '../security.ts';
 
 const updateProfileSchema = z.object({
   displayName: z.string().trim().min(2).max(60),
@@ -18,7 +20,7 @@ export function createProfileRouter(database: AppDatabase): Router {
   const router = Router();
   router.use(optionalAuthentication(database));
 
-  router.get('/me', requireAuthentication, (_request, response) => {
+  router.get('/me', requireAuthentication, requireActiveAccount, (_request, response) => {
     response.json({ user: userFromResponse(response) });
   });
 
@@ -28,7 +30,8 @@ export function createProfileRouter(database: AppDatabase): Router {
     const { rows } = await database.query(`SELECT users.id, users.username, users.display_name, users.avatar_url, users.bio,
       users.verification_status, users.created_at FROM users
       JOIN profile_settings ON profile_settings.user_id = users.id
-      WHERE users.status = 'active' AND profile_settings.discoverable = TRUE AND users.id <> $1
+      WHERE users.status = 'active' AND users.account_status = 'active'
+      AND profile_settings.discoverable = TRUE AND users.id <> $1
       AND ($2 = '' OR users.username ILIKE $3 OR users.display_name ILIKE $3)
       ORDER BY users.created_at DESC LIMIT 30`, [currentUserId, query, `%${query}%`]);
     response.json({ members: rows.map((member) => ({
@@ -42,7 +45,7 @@ export function createProfileRouter(database: AppDatabase): Router {
     })) });
   });
 
-  router.patch('/me', sameOrigin, requireAuthentication, async (request, response) => {
+  router.patch('/me', sameOrigin, requireAuthentication, requireActiveAccount, async (request, response) => {
     const parsed = updateProfileSchema.safeParse(request.body);
     if (!parsed.success) {
       response.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Check your profile details.' });
@@ -70,7 +73,7 @@ export function createProfileRouter(database: AppDatabase): Router {
       email: updated.email,
       avatarUrl: updated.avatar_url,
       bio: updated.bio,
-      walletAddress: updated.wallet_address,
+      walletAddress: user.walletAddress,
       status: updated.status,
       role: updated.role,
       verificationStatus: updated.verification_status,
@@ -82,7 +85,9 @@ export function createProfileRouter(database: AppDatabase): Router {
     const { rows } = await database.query(`SELECT users.id, users.username, users.display_name, users.avatar_url, users.bio,
       users.verification_status, users.created_at FROM users
       JOIN profile_settings ON profile_settings.user_id = users.id
-      WHERE lower(users.username) = lower($1) AND users.status = 'active' AND profile_settings.discoverable = TRUE`,
+      WHERE lower(users.username) = lower($1) AND users.status = 'active'
+      AND users.account_status = 'active'
+      AND profile_settings.discoverable = TRUE`,
     [request.params.username]);
     const user = rows[0] as {
       id: string; username: string; display_name: string; avatar_url: string | null;
@@ -108,19 +113,23 @@ export function createProfileRouter(database: AppDatabase): Router {
     } });
   });
 
-  router.get('/me/wallet', requireAuthentication, async (_request, response) => {
+  router.get('/me/wallet', requireAuthentication, requireActiveAccount, async (_request, response) => {
     const user = userFromResponse(response);
-    const { rows } = await database.withUser(user.id, (client) => client.query(`SELECT balance_units, received_units, given_units
+    const { rows } = await database.withUser(user.id, (client) => client.query(`SELECT balance_units, received_units, given_units,
+      provisioning_status
       FROM wallet_accounts WHERE user_id = $1`, [user.id]));
     const wallet = rows[0] as {
       balance_units: string | number; received_units: string | number; given_units: string | number;
+      provisioning_status: 'pending' | 'provisioned' | 'failed';
     };
     response.json({
-      balance: Number(wallet.balance_units) / 1_000_000,
-      received: Number(wallet.received_units) / 1_000_000,
-      given: Number(wallet.given_units) / 1_000_000,
+      balance: null,
+      received: null,
+      given: null,
       allowance: null,
       transactions: [],
+      provisioningStatus: wallet.provisioning_status,
+      network: 'celo-sepolia',
     });
   });
 

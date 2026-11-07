@@ -8,9 +8,11 @@ PostgreSQL is the application persistence layer. `server/db.ts` owns a pooled co
 
 ## Authentication and authorization
 
-Registration validates and normalizes identity fields, hashes passwords with salted `scrypt`, and creates the user, profile settings, zeroed wallet and hashed email-verification token in one database transaction. Sign-in remains blocked until the single-use 24-hour verification link is redeemed. Password reset uses a separate hashed, single-use, one-hour token and revokes existing sessions. A random session token is sent only in an `HttpOnly`, `SameSite=Lax` cookie; only its SHA-256 hash is persisted. Protected API routes resolve the session server-side and reject missing, expired or suspended accounts. Profile changes and account creation are written to the audit table.
+Registration validates and normalizes identity fields, hashes passwords with salted `scrypt`, and creates the user, profile settings, zeroed wallet and hashed email-verification token in one database transaction. It then independently provisions a deterministic Thirdweb ERC-4337 smart account on Celo Sepolia from the Geemifi user ID; failures persist as `pending`/`failed` and are retried through an authenticated endpoint. No wallet key or provider credential is returned to the browser. Sign-in remains blocked until the single-use 24-hour verification link is redeemed. Password reset uses a separate hashed, single-use, one-hour token and revokes existing sessions. A random session token is sent only in an `HttpOnly`, `SameSite=Lax` cookie; only its SHA-256 hash is persisted. Protected API routes resolve the session server-side and reject missing, expired or suspended accounts. Profile changes and account creation are written to the audit table.
 
 Public profile responses use explicit field selection and never return email, password hash or wallet address. Discovery and direct profile lookup both honor the profile's `discoverable` setting. PostgreSQL is not directly reachable from the browser. Wallet-account and wallet-transaction rows enforce row-level security against the transaction-local `geemifi.user_id` setting. The production runtime role must not own these tables or have `BYPASSRLS`; schema migrations must use a separate migration-capable role.
+
+Email verification, GoodDollar verification and wallet provisioning are independent. `users.email_verified_at` records email status, `users.verification_status` records GoodDollar status, and `wallet_accounts.provisioning_status` plus `smart_wallet_address` record wallet status. GoodDollar verification uses a separate Citizen SDK adapter interface; only a non-production mock provider is selectable. The real Citizen SDK configuration and all G$ transaction operations reject Celo Sepolia until independently verified deployments are available. No transfer or production-signing endpoint is mounted.
 
 ## Modules
 
@@ -20,7 +22,7 @@ Public profile responses use explicit field selection and never return email, pa
 | Users and Profiles | Private profile editing and public discoverable views | Verification, profile settings, achievements |
 | Social Feed | Tables for posts, media, follows, likes and comments | Feed ranking, uploads, moderation and interactions |
 | Notifications | User-scoped notification records | Delivery, read state and preferences |
-| Wallet | Zeroed account data and private summary | Embedded smart-wallet provisioning, verified chain indexer/transaction service; never trust browser balances |
+| Wallet | Thirdweb embedded ERC-4337 account provisioning on Celo Sepolia; no G$ balance or transfer calls | GoodDollar deployment verification, user-authorized signing, transaction receipts/history and mainnet migration |
 | Tips and Gifts | Not active | Allowance accounting and secured settlement |
 | Bounties and Academy | Informational routes only | Separate opportunity, course and reward workflows |
 | Admin | Member role field and moderation data | Role-gated operations API and admin interface |
@@ -36,6 +38,8 @@ Public profile responses use explicit field selection and never return email, pa
 - `PATCH /api/me`: validate and persist profile edits.
 - `GET /api/users?q=...`, `GET /api/users/:username`: discoverable, privacy-safe public profiles.
 - `GET /api/me/wallet`: server-owned wallet summary; allowance is `null` until a real allocation service exists.
+- `POST /api/me/wallet/provision`: idempotently provisions/retries the authenticated account's server-managed embedded wallet.
+- `GET /api/me/gooddollar/verification`, `POST /api/me/gooddollar/verification/start`, `POST /api/me/gooddollar/verification/refresh`: isolated GoodDollar identity boundary; disabled by default, mock-only outside production.
 
 ## Production constraints
 

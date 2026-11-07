@@ -71,7 +71,7 @@ function WalletPeek() {
   return (
     <section className="wallet-peek">
       <div className="wallet-peek-head"><span className="wallet-icon"><WalletIcon size={17} /></span><span>YOUR WALLET</span><Link to="/wallet" aria-label="Open wallet"><ArrowRight size={16} /></Link></div>
-      {error ? <p className="wallet-error">Your wallet summary couldn’t load.</p> : <><div className="wallet-amount">{wallet ? `${wallet.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'} <span>G$</span></div><div className="wallet-footnote"><ShieldCheck size={13} /> Actual wallet balance</div><div className="wallet-divider" /><div className="allowance-note"><span className="allowance-spark">✦</span><span><b>No active allowance</b><small>Kindness allowance isn’t a wallet balance.</small></span></div></>}
+      {error ? <p className="wallet-error">Your wallet summary couldn’t load.</p> : <><div className="wallet-amount">{wallet?.balance == null ? '—' : wallet.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span>G$</span></div><div className="wallet-footnote"><ShieldCheck size={13} /> G$ balance is unavailable on Celo Sepolia</div><div className="wallet-divider" /><div className="allowance-note"><span className="allowance-spark">✦</span><span><b>No active allowance</b><small>Kindness allowance isn’t a wallet balance.</small></span></div></>}
     </section>
   );
 }
@@ -222,11 +222,11 @@ export function WalletPage() {
     api<Wallet>('/me/wallet').then(setWallet).catch(() => setError(true));
   }, []);
 
-  return <ModulePage kicker="A CLEAR VIEW OF YOUR G$" title="My wallet" description="Your actual wallet balance, separate from any future tipping allowance." icon={<WalletIcon size={22} />} theme="green">
+  return <ModulePage kicker="YOUR EMBEDDED WALLET" title="My wallet" description="Your smart wallet is provisioned on Celo Sepolia. GoodDollar balances and transactions are unavailable until a supported deployment is verified." icon={<WalletIcon size={22} />} theme="green">
     {error ? <ErrorPanel message="Your wallet couldn’t load right now." /> : <>
-      <section className="wallet-main-card"><div className="wallet-main-label"><span className="wallet-icon"><WalletIcon size={17} /></span> ACTUAL WALLET BALANCE</div><div className="wallet-main-amount">{wallet ? wallet.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'} <span>G$</span></div><p>Money in your wallet is different from any unspent kindness allowance.</p><div className="wallet-values"><div><span>Received</span><b>{wallet ? `${wallet.received.toFixed(2)} G$` : '—'}</b></div><div><span>Given</span><b>{wallet ? `${wallet.given.toFixed(2)} G$` : '—'}</b></div></div></section>
+      <section className="wallet-main-card"><div className="wallet-main-label"><span className="wallet-icon"><WalletIcon size={17} /></span> G$ BALANCE · UNAVAILABLE</div><div className="wallet-main-amount">— <span>G$</span></div><p>G$ contracts are not configured on Celo Sepolia. No token balance or transfer is being simulated.</p><div className="wallet-values"><div><span>Network</span><b>{wallet?.network ?? 'Celo Sepolia'}</b></div><div><span>G$ transfers</span><b>Disabled</b></div></div></section>
       <section className="wallet-allowance"><span className="allowance-icon"><Heart size={18} /></span><div><b>Kindness allowance</b><p>{wallet?.allowance == null ? 'No allowance is currently allocated to your account.' : `${wallet.allowance} G$ available to tip until it expires.`} An allowance is for tipping only; it is never part of your withdrawable wallet balance.</p></div><span className="allowance-state">NOT ACTIVE</span></section>
-      <section className="transaction-panel"><div className="section-heading"><div><span className="section-kicker">YOUR G$ ACTIVITY</span><h2>Transactions</h2></div><span className="transaction-mark">↗</span></div><EmptyState icon={<WalletIcon size={21} />} title="No transactions yet." body="Confirmed and pending activity will show here when wallet features are available." /></section>
+      <section className="transaction-panel"><div className="section-heading"><div><span className="section-kicker">YOUR G$ ACTIVITY</span><h2>Transactions</h2></div><span className="transaction-mark">↗</span></div><EmptyState icon={<WalletIcon size={21} />} title="G$ transactions are disabled." body="Transaction history will be available only after GoodDollar contracts are verified for the selected network." /></section>
     </>}
   </ModulePage>;
 }

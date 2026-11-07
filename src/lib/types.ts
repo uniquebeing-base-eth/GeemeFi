@@ -6,6 +6,9 @@ export type User = {
   avatarUrl: string | null;
   bio: string;
   walletAddress: string | null;
+  emailVerified: boolean;
+  walletProvisioningStatus: 'pending' | 'provisioning' | 'provisioned' | 'failed';
+  accountStatus: 'pending_email_verification' | 'email_verified' | 'wallet_provisioning' | 'wallet_provisioning_failed' | 'active' | 'suspended';
   status: string;
   role: string;
   verificationStatus: string;
@@ -23,9 +26,11 @@ export type Member = {
 };
 
 export type Wallet = {
-  balance: number;
-  received: number;
-  given: number;
+  balance: number | null;
+  received: number | null;
+  given: number | null;
   allowance: null;
   transactions: Array<{ id: string; kind: string; amount: number; status: string; createdAt: string }>;
+  provisioningStatus: 'pending' | 'provisioned' | 'failed';
+  network: 'celo-sepolia';
 };

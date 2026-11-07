@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowRight, Eye, EyeOff, Heart, LockKeyhole, Mail, Sparkles, UserRound } from 'lucide-react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.ts';
@@ -52,7 +52,7 @@ export function AuthPage({ mode }: { mode: 'signin' | 'join' }) {
   const [submittedEmail, setSubmittedEmail] = useState('');
 
   if (loading) return <AuthLoading />;
-  if (user) return <Navigate to="/feed" replace />;
+  if (user) return <Navigate to={user.accountStatus === 'active' ? '/feed' : '/wallet/setup'} replace />;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,7 +62,10 @@ export function AuthPage({ mode }: { mode: 'signin' | 'join' }) {
     const payload = Object.fromEntries(form.entries());
     setSubmittedEmail(String(payload.email));
     try {
-      const result = await api<{ user?: User; verificationRequired?: boolean }>(`/auth/${isJoin ? 'register' : 'login'}`, {
+      const result = await api<{
+        user?: User;
+        verificationRequired?: boolean;
+      }>(`/auth/${isJoin ? 'register' : 'login'}`, {
         method: 'POST',
         body: JSON.stringify(payload),
       });
@@ -72,7 +75,7 @@ export function AuthPage({ mode }: { mode: 'signin' | 'join' }) {
       }
       if (!result.user) throw new Error('Your account could not be loaded. Please try signing in again.');
       setUser(result.user);
-      navigate(searchParams.get('next') || '/feed', { replace: true });
+      navigate(result.user.accountStatus === 'active' ? searchParams.get('next') || '/feed' : '/wallet/setup', { replace: true });
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : 'Something went wrong. Please try again.');
     } finally {
@@ -88,6 +91,7 @@ export function AuthPage({ mode }: { mode: 'signin' | 'join' }) {
         {registeredEmail ? <>
           <h1>Check your inbox.</h1>
           <p>We sent an email verification link to <b>{registeredEmail}</b>. Verify your address before signing in.</p>
+          <p className="wallet-setup-note">Your embedded wallet will be provisioned automatically after verification.</p>
           <Link className="button button-primary auth-submit" to={`/resend-verification?email=${encodeURIComponent(registeredEmail)}`}>Resend verification email <ArrowRight size={17} /></Link>
         </> : <>
           <h1>{isJoin ? 'Make yourself at home.' : 'Welcome back.'}</h1>
@@ -114,23 +118,31 @@ export function AuthPage({ mode }: { mode: 'signin' | 'join' }) {
 
 export function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { setUser } = useAuth();
   const token = searchParams.get('token') ?? '';
   const [message, setMessage] = useState('Verifying your email link…');
   const [error, setError] = useState(false);
+  const verificationStarted = useRef(false);
 
   useEffect(() => {
+    if (verificationStarted.current) return;
+    verificationStarted.current = true;
     if (!token) {
       setMessage('This verification link is invalid or expired.');
       setError(true);
       return;
     }
-    api<{ ok: boolean }>('/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) })
-      .then(() => setMessage('Your email is verified. You can now sign in.'))
+    api<{ ok: boolean; user: User }>('/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) })
+      .then(({ user }) => {
+        setUser(user);
+        navigate(user.accountStatus === 'active' ? '/feed' : '/wallet/setup', { replace: true });
+      })
       .catch((issue: unknown) => {
         setMessage(issue instanceof Error ? issue.message : 'This verification link is invalid or expired.');
         setError(true);
       });
-  }, [token]);
+  }, [navigate, setUser, token]);
 
   return <AuthMessagePage title={error ? 'Verification link expired.' : 'Email verification'} message={message} action={<Link className="button button-primary auth-submit" to="/signin">Continue to sign in</Link>} />;
 }
