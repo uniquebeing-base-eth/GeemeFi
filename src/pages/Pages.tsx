@@ -1,7 +1,7 @@
 import { useDeferredValue, useEffect, useState, type FormEvent } from 'react';
 import {
   ArrowRight, Bell, BookOpen, Check, Clock3, Compass, Gift, GraduationCap, Heart,
-  HeartHandshake, Lightbulb, LockKeyhole, Search, ShieldCheck, Sparkles, Wallet as WalletIcon,
+  HeartHandshake, Lightbulb, LockKeyhole, Search, ShieldCheck, Sparkles, UserRound, Wallet as WalletIcon,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Avatar } from '../components/Avatar.tsx';
