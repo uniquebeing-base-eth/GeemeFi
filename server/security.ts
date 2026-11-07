@@ -113,7 +113,7 @@ export function optionalAuthentication(database: AppDatabase) {
   };
 }
 
-export function requireAuthentication(request: Request, response: Response, next: NextFunction): void {
+export function requireAuthentication(_request: Request, response: Response, next: NextFunction): void {
   if (!response.locals.user) {
     response.status(401).json({ error: 'Please sign in to continue.' });
     return;

@@ -11,7 +11,6 @@ import {
   removeSession,
   sameOrigin,
   setSessionCookie,
-  userFromResponse,
   verifyPassword,
 } from '../security.ts';
 
@@ -50,7 +49,7 @@ export function createAuthRouter({ database }: AuthRouterOptions): Router {
     next();
   });
 
-  router.get('/me', optionalAuthentication(database), (request, response) => {
+  router.get('/me', optionalAuthentication(database), (_request, response) => {
     response.json({ user: response.locals.user ?? null });
   });
 
@@ -70,8 +69,8 @@ export function createAuthRouter({ database }: AuthRouterOptions): Router {
           VALUES (?, ?, ?, ?, ?)`).run(userId, input.username, input.displayName, input.email, passwordHash);
         database.prepare('INSERT INTO profile_settings (user_id) VALUES (?)').run(userId);
         database.prepare('INSERT INTO wallet_accounts (user_id) VALUES (?)').run(userId);
-        database.prepare('INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id)
-          VALUES (?, ?, ?, ?, ?)').run(randomUUID(), userId, 'account.created', 'user', userId);
+        database.prepare(`INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id)
+          VALUES (?, ?, ?, ?, ?)`).run(randomUUID(), userId, 'account.created', 'user', userId);
       });
       createUser();
       const token = createSession(database, userId);
@@ -112,7 +111,7 @@ export function createAuthRouter({ database }: AuthRouterOptions): Router {
     response.json({ ok: true });
   });
 
-  router.get('/session', optionalAuthentication(database), (request, response) => {
+  router.get('/session', optionalAuthentication(database), (_request, response) => {
     response.json({ user: response.locals.user ?? null });
   });
 
