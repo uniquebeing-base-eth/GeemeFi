@@ -8,11 +8,11 @@ PostgreSQL is the application persistence layer. `server/db.ts` owns a pooled co
 
 ## Authentication and authorization
 
-Registration validates and normalizes identity fields, hashes passwords with salted `scrypt`, and creates the user, profile settings, zeroed wallet and hashed email-verification token in one database transaction. It then independently provisions a deterministic Thirdweb ERC-4337 smart account on Celo Sepolia from the Geemifi user ID; failures persist as `pending`/`failed` and are retried through an authenticated endpoint. No wallet key or provider credential is returned to the browser. Sign-in remains blocked until the single-use 24-hour verification link is redeemed. Password reset uses a separate hashed, single-use, one-hour token and revokes existing sessions. A random session token is sent only in an `HttpOnly`, `SameSite=Lax` cookie; only its SHA-256 hash is persisted. Protected API routes resolve the session server-side and reject missing, expired or suspended accounts. Profile changes and account creation are written to the audit table.
+Registration validates and normalizes identity fields, hashes passwords with salted `scrypt`, and creates the user, profile settings, zeroed wallet and hashed email-verification token in one database transaction. It does not create a wallet or establish a session. Redeeming a single-use 24-hour verification link marks the email verified and automatically provisions a deterministic Thirdweb ERC-4337 smart account on Celo Sepolia from the Geemifi user ID. Provisioning is idempotent and can be retried after failure. The wallet activation credential is a server-only secret and is never returned to the browser. A verified user whose wallet is still provisioning can only access the onboarding/retry route; application APIs require the derived account state `active`. Password reset uses a separate hashed, single-use, one-hour token and revokes existing sessions. A random session token is sent only in an `HttpOnly`, `SameSite=Lax` cookie; only its SHA-256 hash is persisted. Protected API routes resolve the session server-side and reject missing, expired or suspended accounts. Profile changes and account creation are written to the audit table.
 
 Public profile responses use explicit field selection and never return email, password hash or wallet address. Discovery and direct profile lookup both honor the profile's `discoverable` setting. PostgreSQL is not directly reachable from the browser. Wallet-account and wallet-transaction rows enforce row-level security against the transaction-local `geemifi.user_id` setting. The production runtime role must not own these tables or have `BYPASSRLS`; schema migrations must use a separate migration-capable role.
 
-Email verification, GoodDollar verification and wallet provisioning are independent. `users.email_verified_at` records email status, `users.verification_status` records GoodDollar status, and `wallet_accounts.provisioning_status` plus `smart_wallet_address` record wallet status. GoodDollar verification uses a separate Citizen SDK adapter interface; only a non-production mock provider is selectable. The real Citizen SDK configuration and all G$ transaction operations reject Celo Sepolia until independently verified deployments are available. No transfer or production-signing endpoint is mounted.
+Email verification, account activation and wallet provisioning are separate states. `users.email_verified_at` records email status, `users.account_status` tracks onboarding readiness, and `wallet_accounts.provisioning_status` plus `smart_wallet_address` record wallet provisioning. No GoodDollar SDK, identity endpoint, token balance or transfer integration is mounted. No wallet signing or transaction endpoint is enabled.
 
 ## Modules
 
@@ -22,7 +22,7 @@ Email verification, GoodDollar verification and wallet provisioning are independ
 | Users and Profiles | Private profile editing and public discoverable views | Verification, profile settings, achievements |
 | Social Feed | Tables for posts, media, follows, likes and comments | Feed ranking, uploads, moderation and interactions |
 | Notifications | User-scoped notification records | Delivery, read state and preferences |
-| Wallet | Thirdweb embedded ERC-4337 account provisioning on Celo Sepolia; no G$ balance or transfer calls | GoodDollar deployment verification, user-authorized signing, transaction receipts/history and mainnet migration |
+| Wallet | Thirdweb embedded ERC-4337 account provisioning on Celo Sepolia; no external wallet connection, balances or signing | User-authorized signing, transaction monitoring and future Base support |
 | Tips and Gifts | Not active | Allowance accounting and secured settlement |
 | Bounties and Academy | Informational routes only | Separate opportunity, course and reward workflows |
 | Admin | Member role field and moderation data | Role-gated operations API and admin interface |
@@ -37,10 +37,9 @@ Email verification, GoodDollar verification and wallet provisioning are independ
 - `GET /api/me`: authenticated user's profile.
 - `PATCH /api/me`: validate and persist profile edits.
 - `GET /api/users?q=...`, `GET /api/users/:username`: discoverable, privacy-safe public profiles.
-- `GET /api/me/wallet`: server-owned wallet summary; allowance is `null` until a real allocation service exists.
-- `POST /api/me/wallet/provision`: idempotently provisions/retries the authenticated account's server-managed embedded wallet.
-- `GET /api/me/gooddollar/verification`, `POST /api/me/gooddollar/verification/start`, `POST /api/me/gooddollar/verification/refresh`: isolated GoodDollar identity boundary; disabled by default, mock-only outside production.
+- `GET /api/me/wallet`: server-owned wallet summary, available after account activation only.
+- `POST /api/me/wallet/provision`: idempotently provisions/retries the authenticated, email-verified account's embedded wallet.
 
 ## Production constraints
 
-Use a PostgreSQL migration-capable role only for `npm run db:migrate`; run the service with a least-privilege role and `DATABASE_URL`. Before horizontal scaling, configure shared rate-limit storage, managed media storage, operational backups, and appropriate trusted-proxy settings for secure cookies.
+Use a PostgreSQL migration-capable role only for `npm run db:migrate`; run the service with a least-privilege role and `DATABASE_URL`. Keep `THIRDWEB_WALLET_SECRET` stable and backed up: changing it without a wallet credential migration would prevent recovering existing backend wallets. Only Celo Sepolia (chain ID `11142220`) is allowlisted; Base is not currently provisioned, and mainnet networks are rejected. Before horizontal scaling, configure shared rate-limit storage, managed media storage, operational backups, and appropriate trusted-proxy settings for secure cookies.

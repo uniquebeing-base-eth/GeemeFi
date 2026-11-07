@@ -9,7 +9,7 @@ import { useAuth } from '../components/AuthContext.tsx';
 export function WelcomePage() {
   const { user, loading } = useAuth();
   if (loading) return <AuthLoading />;
-  if (user) return <Navigate to="/feed" replace />;
+  if (user) return <Navigate to={user.accountStatus === 'active' ? '/feed' : '/wallet/setup'} replace />;
 
   return (
     <div className="welcome-page">

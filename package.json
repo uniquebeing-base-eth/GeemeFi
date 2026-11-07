@@ -13,7 +13,6 @@
     "db:migrate:sqlite": "tsx scripts/migrate-sqlite-to-postgres.ts"
   },
   "dependencies": {
-    "@goodsdks/citizen-sdk": "^1.2.7",
     "@types/pg": "^8.23.1",
     "better-sqlite3": "^12.2.0",
     "dotenv": "^16.6.1",

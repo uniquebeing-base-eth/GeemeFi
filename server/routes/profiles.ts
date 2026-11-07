@@ -120,7 +120,7 @@ export function createProfileRouter(database: AppDatabase): Router {
       FROM wallet_accounts WHERE user_id = $1`, [user.id]));
     const wallet = rows[0] as {
       balance_units: string | number; received_units: string | number; given_units: string | number;
-      provisioning_status: 'pending' | 'provisioned' | 'failed';
+      provisioning_status: 'pending' | 'provisioning' | 'provisioned' | 'failed';
     };
     response.json({
       balance: null,

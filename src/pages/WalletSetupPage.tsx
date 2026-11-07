@@ -3,7 +3,7 @@ import { LockKeyhole, RefreshCw, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../components/AuthContext.tsx';
 import { Brand } from '../components/Brand.tsx';
-import { api } from '../lib/api.ts';
+import { ApiError, api } from '../lib/api.ts';
 
 type WalletProvisioningResult = {
   provisioningStatus: 'provisioned';
@@ -27,9 +27,18 @@ export function WalletSetupPage() {
     setPending(true);
     setError('');
     try {
-      const result = await api<WalletProvisioningResult>('/me/wallet/provision', { method: 'POST' });
-      setUser({ ...result.user, walletAddress: result.walletAddress });
-      navigate(nextPath, { replace: true });
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const result = await api<WalletProvisioningResult>('/me/wallet/provision', { method: 'POST' });
+          setUser({ ...result.user, walletAddress: result.walletAddress });
+          navigate(nextPath, { replace: true });
+          return;
+        } catch (issue) {
+          const canRetry = !(issue instanceof ApiError) || issue.status >= 500;
+          if (!canRetry || attempt === 2) throw issue;
+          await new Promise((resolve) => setTimeout(resolve, 750 * (attempt + 1)));
+        }
+      }
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : 'Wallet setup could not be completed.');
     } finally {

@@ -124,11 +124,7 @@ export function createAuthRouter({ database, email = {
     const { rows } = await database.query(`SELECT * FROM users WHERE lower(email) = $1`,
       [parsed.data.email]);
     const row = rows[0] as (
-      Parameters<typeof publicUser>[0] & {
-        password_hash: string;
-        status: string;
-        email_verified_at: Date | null;
-      }
+      { id: string; password_hash: string; status: string; email_verified_at: Date | null }
     ) | undefined;
     const valid = row ? await verifyPassword(parsed.data.password, row.password_hash) : false;
     if (!row || !valid || row.status !== 'active') {

@@ -31,6 +31,6 @@ export type Wallet = {
   given: number | null;
   allowance: null;
   transactions: Array<{ id: string; kind: string; amount: number; status: string; createdAt: string }>;
-  provisioningStatus: 'pending' | 'provisioned' | 'failed';
+  provisioningStatus: 'pending' | 'provisioning' | 'provisioned' | 'failed';
   network: 'celo-sepolia';
 };

@@ -69,7 +69,14 @@ export async function provisionEmbeddedWallet(
   if (!account.email_verified_at) throw new Error('Verify the account email before provisioning a wallet.');
   if (account.user_status !== 'active') throw new Error('Suspended accounts cannot provision a wallet.');
   if (account.smart_wallet_address) {
-    await database.query(`UPDATE users SET account_status = 'active', updated_at = now() WHERE id = $1`, [userId]);
+    await database.withUser(userId, async (client) => {
+      await client.query(
+        `UPDATE wallet_accounts SET provisioning_status = 'provisioned', updated_at = now()
+          WHERE user_id = $1`,
+        [userId],
+      );
+      await client.query(`UPDATE users SET account_status = 'active', updated_at = now() WHERE id = $1`, [userId]);
+    });
     return account.smart_wallet_address;
   }
 

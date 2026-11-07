@@ -20,6 +20,8 @@ SET account_status = CASE
   ELSE 'email_verified'
 END;
 
+CREATE INDEX users_account_status_created_at_idx ON users (account_status, created_at DESC);
+
 ALTER TABLE wallet_accounts
   DROP CONSTRAINT IF EXISTS wallet_accounts_provisioning_status_check;
 
