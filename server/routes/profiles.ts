@@ -10,6 +10,10 @@ const updateProfileSchema = z.object({
   avatarUrl: z.union([z.literal(''), z.string().url().max(500).refine((value) => value.startsWith('https://'))]),
 });
 
+function isoDate(value: string | Date): string {
+  return value instanceof Date ? value.toISOString() : value;
+}
+
 export function createProfileRouter(database: AppDatabase): Router {
   const router = Router();
   router.use(optionalAuthentication(database));
@@ -18,33 +22,27 @@ export function createProfileRouter(database: AppDatabase): Router {
     response.json({ user: userFromResponse(response) });
   });
 
-  router.get('/users', (request, response) => {
+  router.get('/users', async (request, response) => {
     const query = typeof request.query.q === 'string' ? request.query.q.trim().slice(0, 40) : '';
     const currentUserId = response.locals.user?.id ?? '';
-    const users = database.prepare(`SELECT users.id, users.username, users.display_name, users.avatar_url, users.bio,
+    const { rows } = await database.query(`SELECT users.id, users.username, users.display_name, users.avatar_url, users.bio,
       users.verification_status, users.created_at FROM users
       JOIN profile_settings ON profile_settings.user_id = users.id
-      WHERE users.status = 'active' AND profile_settings.discoverable = 1 AND users.id <> ?
-      AND (? = '' OR users.username LIKE ? OR users.display_name LIKE ?)
-      ORDER BY users.created_at DESC LIMIT 30`).all(currentUserId, query, `%${query}%`, `%${query}%`);
-    response.json({ members: users.map((entry) => {
-      const member = entry as {
-        id: string; username: string; display_name: string; avatar_url: string | null;
-        bio: string; verification_status: string; created_at: string;
-      };
-      return {
-        id: member.id,
-        username: member.username,
-        displayName: member.display_name,
-        avatarUrl: member.avatar_url,
-        bio: member.bio,
-        verificationStatus: member.verification_status,
-        createdAt: member.created_at,
-      };
-    }) });
+      WHERE users.status = 'active' AND profile_settings.discoverable = TRUE AND users.id <> $1
+      AND ($2 = '' OR users.username ILIKE $3 OR users.display_name ILIKE $3)
+      ORDER BY users.created_at DESC LIMIT 30`, [currentUserId, query, `%${query}%`]);
+    response.json({ members: rows.map((member) => ({
+      id: member.id,
+      username: member.username,
+      displayName: member.display_name,
+      avatarUrl: member.avatar_url,
+      bio: member.bio,
+      verificationStatus: member.verification_status,
+      createdAt: isoDate(member.created_at),
+    })) });
   });
 
-  router.patch('/me', sameOrigin, requireAuthentication, (request, response) => {
+  router.patch('/me', sameOrigin, requireAuthentication, async (request, response) => {
     const parsed = updateProfileSchema.safeParse(request.body);
     if (!parsed.success) {
       response.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Check your profile details.' });
@@ -52,19 +50,19 @@ export function createProfileRouter(database: AppDatabase): Router {
     }
 
     const user = userFromResponse(response);
-    const update = database.transaction(() => {
-      database.prepare(`UPDATE users SET display_name = ?, bio = ?, avatar_url = ?,
-        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`)
-        .run(parsed.data.displayName, parsed.data.bio, parsed.data.avatarUrl || null, user.id);
-      database.prepare(`INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id)
-        VALUES (?, ?, ?, ?, ?)`).run(randomUUID(), user.id, 'profile.updated', 'user', user.id);
-      return database.prepare('SELECT * FROM users WHERE id = ?').get(user.id) as {
+    const updated = await database.transaction(async (client) => {
+      await client.query(`UPDATE users SET display_name = $1, bio = $2, avatar_url = $3,
+        updated_at = now() WHERE id = $4`,
+      [parsed.data.displayName, parsed.data.bio, parsed.data.avatarUrl || null, user.id]);
+      await client.query(`INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id)
+        VALUES ($1, $2, $3, $4, $5)`, [randomUUID(), user.id, 'profile.updated', 'user', user.id]);
+      const { rows } = await client.query('SELECT * FROM users WHERE id = $1', [user.id]);
+      return rows[0] as {
         id: string; username: string; display_name: string; email: string; avatar_url: string | null;
         bio: string; wallet_address: string | null; status: string; role: string;
-        verification_status: string; created_at: string;
+        verification_status: string; created_at: string | Date;
       };
     });
-    const updated = update();
     response.json({ user: {
       id: updated.id,
       username: updated.username,
@@ -76,29 +74,28 @@ export function createProfileRouter(database: AppDatabase): Router {
       status: updated.status,
       role: updated.role,
       verificationStatus: updated.verification_status,
-      createdAt: updated.created_at,
+      createdAt: isoDate(updated.created_at),
     } });
   });
 
-  router.get('/users/:username', (request, response) => {
-    const user = database.prepare(`SELECT users.id, users.username, users.display_name, users.avatar_url, users.bio,
+  router.get('/users/:username', async (request, response) => {
+    const { rows } = await database.query(`SELECT users.id, users.username, users.display_name, users.avatar_url, users.bio,
       users.verification_status, users.created_at FROM users
       JOIN profile_settings ON profile_settings.user_id = users.id
-      WHERE users.username = ? COLLATE NOCASE AND users.status = 'active' AND profile_settings.discoverable = 1`)
-      .get(request.params.username) as {
-        id: string; username: string; display_name: string; avatar_url: string | null;
-        bio: string; verification_status: string; created_at: string;
-      } | undefined;
+      WHERE lower(users.username) = lower($1) AND users.status = 'active' AND profile_settings.discoverable = TRUE`,
+    [request.params.username]);
+    const user = rows[0] as {
+      id: string; username: string; display_name: string; avatar_url: string | null;
+      bio: string; verification_status: string; created_at: string | Date;
+    } | undefined;
     if (!user) {
       response.status(404).json({ error: 'We could not find that profile.' });
       return;
     }
-    const counts = database.prepare(`SELECT
-      (SELECT COUNT(*) FROM follows WHERE followed_id = ?) AS followers,
-      (SELECT COUNT(*) FROM follows WHERE follower_id = ?) AS following,
-      (SELECT COUNT(*) FROM posts WHERE author_id = ?) AS posts`).get(user.id, user.id, user.id) as {
-        followers: number; following: number; posts: number;
-      };
+    const { rows: countRows } = await database.query(`SELECT
+      (SELECT COUNT(*)::int FROM follows WHERE followed_id = $1) AS followers,
+      (SELECT COUNT(*)::int FROM follows WHERE follower_id = $1) AS following,
+      (SELECT COUNT(*)::int FROM posts WHERE author_id = $1) AS posts`, [user.id]);
     response.json({ profile: {
       id: user.id,
       username: user.username,
@@ -106,21 +103,22 @@ export function createProfileRouter(database: AppDatabase): Router {
       avatarUrl: user.avatar_url,
       bio: user.bio,
       verificationStatus: user.verification_status,
-      createdAt: user.created_at,
-      ...counts,
+      createdAt: isoDate(user.created_at),
+      ...countRows[0],
     } });
   });
 
-  router.get('/me/wallet', requireAuthentication, (_request, response) => {
+  router.get('/me/wallet', requireAuthentication, async (_request, response) => {
     const user = userFromResponse(response);
-    const wallet = database.prepare(`SELECT balance_units, received_units, given_units
-      FROM wallet_accounts WHERE user_id = ?`).get(user.id) as {
-        balance_units: number; received_units: number; given_units: number;
-      };
+    const { rows } = await database.withUser(user.id, (client) => client.query(`SELECT balance_units, received_units, given_units
+      FROM wallet_accounts WHERE user_id = $1`, [user.id]));
+    const wallet = rows[0] as {
+      balance_units: string | number; received_units: string | number; given_units: string | number;
+    };
     response.json({
-      balance: wallet.balance_units / 1_000_000,
-      received: wallet.received_units / 1_000_000,
-      given: wallet.given_units / 1_000_000,
+      balance: Number(wallet.balance_units) / 1_000_000,
+      received: Number(wallet.received_units) / 1_000_000,
+      given: Number(wallet.given_units) / 1_000_000,
       allowance: null,
       transactions: [],
     });

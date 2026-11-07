@@ -1,7 +1,7 @@
 import { createHash, randomBytes, scrypt as callbackScrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import type { NextFunction, Request, Response } from 'express';
-import type { AppDatabase } from './db.ts';
+import type { AppDatabase, Queryable } from './db.ts';
 
 const scrypt = promisify(callbackScrypt);
 const SESSION_COOKIE = 'geemifi_session';
@@ -32,7 +32,7 @@ type UserRow = {
   status: string;
   role: string;
   verification_status: string;
-  created_at: string;
+  created_at: string | Date;
 };
 
 export function publicUser(row: UserRow): AuthenticatedUser {
@@ -47,7 +47,7 @@ export function publicUser(row: UserRow): AuthenticatedUser {
     status: row.status,
     role: row.role,
     verificationStatus: row.verification_status,
-    createdAt: row.created_at,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
   };
 }
 
@@ -75,11 +75,12 @@ function readCookie(request: Request, name: string): string | undefined {
   return cookie ? decodeURIComponent(cookie.slice(name.length + 1)) : undefined;
 }
 
-export function createSession(database: AppDatabase, userId: string): string {
+export async function createSession(database: Queryable, userId: string): Promise<string> {
   const token = randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + SESSION_LIFETIME_MS).toISOString();
-  database.prepare('INSERT INTO sessions (id_hash, user_id, expires_at) VALUES (?, ?, ?)')
-    .run(hashSessionToken(token), userId, expiresAt);
+  const expiresAt = new Date(Date.now() + SESSION_LIFETIME_MS);
+  await database.query('INSERT INTO sessions (id_hash, user_id, expires_at) VALUES ($1, $2, $3)', [
+    hashSessionToken(token), userId, expiresAt,
+  ]);
   return token;
 }
 
@@ -93,21 +94,26 @@ export function clearSessionCookie(response: Response): void {
   response.setHeader('Set-Cookie', `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`);
 }
 
-export function removeSession(database: AppDatabase, request: Request): void {
+export async function removeSession(database: Queryable, request: Request): Promise<void> {
   const token = readCookie(request, SESSION_COOKIE);
-  if (token) database.prepare('DELETE FROM sessions WHERE id_hash = ?').run(hashSessionToken(token));
+  if (token) await database.query('DELETE FROM sessions WHERE id_hash = $1', [hashSessionToken(token)]);
 }
 
 export function optionalAuthentication(database: AppDatabase) {
-  return (request: Request, response: Response, next: NextFunction) => {
+  return async (request: Request, response: Response, next: NextFunction) => {
     const token = readCookie(request, SESSION_COOKIE);
     if (token) {
-      const row = database.prepare(`
+      try {
+        const { rows } = await database.query<UserRow>(`
         SELECT users.* FROM sessions
         JOIN users ON users.id = sessions.user_id
-        WHERE sessions.id_hash = ? AND sessions.expires_at > ? AND users.status = 'active'
-      `).get(hashSessionToken(token), new Date().toISOString()) as UserRow | undefined;
-      if (row) response.locals.user = publicUser(row);
+        WHERE sessions.id_hash = $1 AND sessions.expires_at > $2 AND users.status = 'active'
+      `, [hashSessionToken(token), new Date()]);
+        if (rows[0]) response.locals.user = publicUser(rows[0]);
+      } catch (error) {
+        next(error);
+        return;
+      }
     }
     next();
   };

@@ -2,7 +2,9 @@ import { Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router
 import { AuthProvider, useAuth } from './components/AuthContext.tsx';
 import { AppShell } from './components/AppShell.tsx';
 import { Brand } from './components/Brand.tsx';
-import { AuthPage, WelcomePage } from './pages/AuthPages.tsx';
+import {
+  AuthPage, ForgotPasswordPage, ResendVerificationPage, ResetPasswordPage, VerifyEmailPage, WelcomePage,
+} from './pages/AuthPages.tsx';
 import {
   BountiesPage, ExplorePage, FeedPage, LearnPage, NotificationsPage, ProfilePage, PublicProfilePage, WalletPage,
 } from './pages/Pages.tsx';
@@ -14,6 +16,10 @@ export function App() {
         <Route path="/welcome" element={<WelcomePage />} />
         <Route path="/signin" element={<AuthPage mode="signin" />} />
         <Route path="/join" element={<AuthPage mode="join" />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/resend-verification" element={<ResendVerificationPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route element={<PublicProfileLayout />}>
           <Route path="/profile/:username" element={<PublicProfilePage />} />
         </Route>

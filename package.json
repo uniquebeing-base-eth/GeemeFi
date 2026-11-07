@@ -8,7 +8,9 @@
     "build": "vite build && tsc --noEmit",
     "start": "node server/index.ts",
     "check": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "db:migrate": "tsx scripts/migrate-postgres.ts",
+    "db:migrate:sqlite": "tsx scripts/migrate-sqlite-to-postgres.ts"
   },
   "dependencies": {
     "@goodsdks/citizen-sdk": "^1.2.7",

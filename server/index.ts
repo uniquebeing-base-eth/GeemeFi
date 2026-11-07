@@ -8,7 +8,8 @@ import { createProfileRouter } from './routes/profiles.ts';
 
 const app = express();
 const port = Number(process.env.PORT ?? 5173);
-const database = createDatabase(process.env.DATABASE_PATH ?? './data/geemifi.sqlite');
+const database = createDatabase();
+await database.query('SELECT 1');
 
 app.disable('x-powered-by');
 app.use((_request, response, next) => {

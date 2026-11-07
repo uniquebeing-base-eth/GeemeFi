@@ -4,18 +4,21 @@ Geemifi is a community for generosity, practical learning and shared opportunity
 
 ## Run locally
 
-Requirements: Node.js 22.18 or newer and npm.
+Requirements: Node.js 22.18 or newer, npm and PostgreSQL.
 
 ```sh
 npm install
 cp .env.example .env
+npm run db:migrate
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). Create an account, edit your profile and explore the application. SQLite data is stored in `data/geemifi.sqlite` by default; set `DATABASE_PATH` to choose another location.
+Set `DATABASE_URL` in `.env` to a PostgreSQL database you control. The legacy SQLite database is not modified or removed by the application. To copy it to a new, empty PostgreSQL database, set `SQLITE_SOURCE_PATH` and run `npm run db:migrate:sqlite`. This command makes a consistent SQLite backup (including committed WAL data) before copying records, and refuses to merge into populated PostgreSQL tables.
+
+Open [http://localhost:5173](http://localhost:5173). Create an account, edit your profile and explore the application.
 
 ```sh
-npm test       # API integration test against an isolated SQLite database
+npm test       # API integration test (requires TEST_DATABASE_URL or DATABASE_URL)
 npm run check  # TypeScript check
 npm run build  # Production frontend build and TypeScript check
 ```
@@ -27,29 +30,30 @@ NODE_ENV=production npm run build
 NODE_ENV=production npm start
 ```
 
-Set `PORT` and `DATABASE_PATH` in the deployment environment. Use a persistent volume for the database, terminate TLS at the host or trusted proxy, and keep the database file private. The current SQLite setup is intended for local development and a single application instance, not a horizontally scaled service.
+Set `PORT`, `DATABASE_URL`, `RESEND_API_KEY`, `EMAIL_FROM`, and `APP_BASE_URL` in the deployment environment. Apply schema updates with `npm run db:migrate` using a migration-capable database role; run the app with a least-privilege PostgreSQL role. Terminate TLS at the host or trusted proxy.
 
 ## What works
 
-- Account registration, sign-in, sign-out and persistent sessions.
+- Account registration with single-use email verification, sign-in, sign-out and persistent sessions.
+- Branded verification and password-reset emails sent through Resend; reset tokens are hashed at rest, expire, are single-use, and revoke prior sessions.
 - Passwords hashed with Node.js `scrypt`; opaque session tokens are stored as SHA-256 hashes and delivered through `HttpOnly`, `SameSite=Lax` cookies.
 - Protected profile editing with server-side validation and audit records.
 - Discoverable member search and public profiles that omit email and wallet identifiers.
 - Responsive application shell, working navigation, loading/error/empty states, and branded Phase 1 previews for later modules.
 - Wallet summary backed by server-owned database values. New accounts start at zero; no client-supplied balance or allowance is accepted.
-- Versioned, transactional SQLite migration for users, settings, sessions, social infrastructure, notifications, wallet records, moderation reports and audit logs.
+- Versioned, transactional PostgreSQL migrations for users, settings, sessions, social infrastructure, notifications, wallet records, moderation reports and audit logs.
 
 ## Project layout
 
 ```text
 server/
-  db.ts                 SQLite connection and migration runner
+  db.ts                 PostgreSQL connection, transactions and migration runner
   index.ts              HTTP server, API registration and SPA hosting
   security.ts            Passwords, sessions, origin checks and auth guards
   routes/
     auth.ts              Registration, login, logout and current session
     profiles.ts          Public profiles, profile updates and wallet summary
-  migrations/            Ordered SQL migrations
+  migrations/postgres/   Ordered PostgreSQL migrations
 src/
   app.tsx                Route table and protected route boundary
   components/            Brand, shell, avatar and authentication context
@@ -64,14 +68,13 @@ See [docs/architecture.md](docs/architecture.md) for module responsibilities, da
 
 ## Architecture and security notes
 
-The browser only communicates with the same-origin Express API. The SQLite file is never exposed to the client. Private operations require a database-backed session, and request bodies are validated on the server. Writes also check the request origin. The application stores no real token balance: wallet fields are a foundation model and do not authorize transfers.
+The browser only communicates with the same-origin Express API. The PostgreSQL database is never exposed to the client. Private operations require a database-backed session, and request bodies are validated on the server. Writes also check the request origin. Wallet-account and wallet-transaction rows use PostgreSQL row-level security keyed to a transaction-local user ID; configure the runtime database role without table ownership or `BYPASSRLS`. The application stores no real token balance: wallet fields are a foundation model and do not authorize transfers.
 
-SQLite has no row-level security (RLS). Access control is enforced in the private server API, not by database RLS policies. Before serving a public multi-instance deployment, move persistence to PostgreSQL, add and verify database RLS policies, configure production-grade shared rate limiting, and review the deployment threat model. The current process-local authentication rate limiter is intended as a basic foundation only.
+The auth rate limiter is process-local and intended as a basic foundation only; configure shared rate limiting before horizontally scaling.
 
 ## Not included yet
 
-- Password recovery and email verification require a configured email provider.
-- Wallet connection, GoodDollar identity verification, on-chain transfers and allowance allocation are not implemented.
+- Embedded smart-wallet provisioning, GoodDollar identity verification and on-chain G$ transfers are not implemented yet.
 - Feed posts, media uploads, follows, likes, comments, notifications and moderation workflows have schema foundations only.
 - Gifts, bounty funding/settlement, courses, certificates and tutor applications are not active.
 - Admin role data is modeled, but there is no admin UI or administrative API.
