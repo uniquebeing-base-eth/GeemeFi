@@ -1,6 +1,7 @@
-import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './components/AuthContext.tsx';
 import { AppShell } from './components/AppShell.tsx';
+import { Brand } from './components/Brand.tsx';
 import { AuthPage, WelcomePage } from './pages/AuthPages.tsx';
 import {
   BountiesPage, ExplorePage, FeedPage, LearnPage, NotificationsPage, ProfilePage, PublicProfilePage, WalletPage,
@@ -13,6 +14,9 @@ export function App() {
         <Route path="/welcome" element={<WelcomePage />} />
         <Route path="/signin" element={<AuthPage mode="signin" />} />
         <Route path="/join" element={<AuthPage mode="join" />} />
+        <Route element={<PublicProfileLayout />}>
+          <Route path="/profile/:username" element={<PublicProfilePage />} />
+        </Route>
         <Route element={<ProtectedApp />}>
           <Route element={<AppShell />}>
             <Route path="/" element={<Navigate to="/feed" replace />} />
@@ -23,12 +27,24 @@ export function App() {
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/wallet" element={<WalletPage />} />
             <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/profile/:username" element={<PublicProfilePage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
+  );
+}
+
+function PublicProfileLayout() {
+  const { user } = useAuth();
+  return (
+    <div className="public-profile-shell">
+      <header className="public-profile-header">
+        <Brand />
+        {user ? <Link to="/explore">Back to community</Link> : <Link to="/signin">Sign in</Link>}
+      </header>
+      <main className="public-profile-main"><Outlet /></main>
+    </div>
   );
 }
 

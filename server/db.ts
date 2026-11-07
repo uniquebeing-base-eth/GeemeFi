@@ -22,10 +22,21 @@ export function createDatabase(databasePath: string): AppDatabase {
   )`);
   const migrationsPath = fileURLToPath(new URL('./migrations/', import.meta.url));
   const appliedMigrations = new Set((database.prepare('SELECT name FROM schema_migrations').all() as Array<{ name: string }>).map(({ name }) => name));
+  const existingTables = new Set((database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>).map(({ name }) => name));
   const migrationNames = readdirSync(migrationsPath).filter((name) => name.endsWith('.sql')).sort();
 
   for (const name of migrationNames) {
     if (appliedMigrations.has(name)) continue;
+
+    const foundationTables = [
+      'users', 'profile_settings', 'sessions', 'posts', 'media', 'follows', 'likes', 'comments',
+      'notifications', 'wallet_accounts', 'wallet_transactions', 'activity', 'moderation_reports', 'audit_logs',
+    ];
+    if (name === '001_foundation.sql' && foundationTables.every((table) => existingTables.has(table))) {
+      database.prepare('INSERT INTO schema_migrations (name) VALUES (?)').run(name);
+      continue;
+    }
+
     const sql = readFileSync(resolve(migrationsPath, name), 'utf8');
     database.transaction(() => {
       database.exec(sql);
