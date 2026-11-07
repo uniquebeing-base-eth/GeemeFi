@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import type { AppDatabase } from '../db.ts';
@@ -20,10 +21,12 @@ export function createProfileRouter(database: AppDatabase): Router {
   router.get('/users', (request, response) => {
     const query = typeof request.query.q === 'string' ? request.query.q.trim().slice(0, 40) : '';
     const currentUserId = response.locals.user?.id ?? '';
-    const users = database.prepare(`SELECT id, username, display_name, avatar_url, bio,
-      verification_status, created_at FROM users
-      WHERE status = 'active' AND id <> ? AND (? = '' OR username LIKE ? OR display_name LIKE ?)
-      ORDER BY created_at DESC LIMIT 30`).all(currentUserId, query, `%${query}%`, `%${query}%`);
+    const users = database.prepare(`SELECT users.id, users.username, users.display_name, users.avatar_url, users.bio,
+      users.verification_status, users.created_at FROM users
+      JOIN profile_settings ON profile_settings.user_id = users.id
+      WHERE users.status = 'active' AND profile_settings.discoverable = 1 AND users.id <> ?
+      AND (? = '' OR users.username LIKE ? OR users.display_name LIKE ?)
+      ORDER BY users.created_at DESC LIMIT 30`).all(currentUserId, query, `%${query}%`, `%${query}%`);
     response.json({ members: users.map((entry) => {
       const member = entry as {
         id: string; username: string; display_name: string; avatar_url: string | null;
@@ -49,23 +52,39 @@ export function createProfileRouter(database: AppDatabase): Router {
     }
 
     const user = userFromResponse(response);
-    database.prepare(`UPDATE users SET display_name = ?, bio = ?, avatar_url = ?,
-      updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`)
-      .run(parsed.data.displayName, parsed.data.bio, parsed.data.avatarUrl || null, user.id);
-    database.prepare(`INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id)
-      VALUES (?, ?, ?, ?, ?)`).run(crypto.randomUUID(), user.id, 'profile.updated', 'user', user.id);
-    const updated = database.prepare('SELECT * FROM users WHERE id = ?').get(user.id) as Parameters<typeof userFromResponse>[0];
+    const update = database.transaction(() => {
+      database.prepare(`UPDATE users SET display_name = ?, bio = ?, avatar_url = ?,
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`)
+        .run(parsed.data.displayName, parsed.data.bio, parsed.data.avatarUrl || null, user.id);
+      database.prepare(`INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id)
+        VALUES (?, ?, ?, ?, ?)`).run(randomUUID(), user.id, 'profile.updated', 'user', user.id);
+      return database.prepare('SELECT * FROM users WHERE id = ?').get(user.id) as {
+        id: string; username: string; display_name: string; email: string; avatar_url: string | null;
+        bio: string; wallet_address: string | null; status: string; role: string;
+        verification_status: string; created_at: string;
+      };
+    });
+    const updated = update();
     response.json({ user: {
-      ...user,
-      displayName: (updated as unknown as { display_name: string }).display_name,
-      bio: (updated as unknown as { bio: string }).bio,
-      avatarUrl: (updated as unknown as { avatar_url: string | null }).avatar_url,
+      id: updated.id,
+      username: updated.username,
+      displayName: updated.display_name,
+      email: updated.email,
+      avatarUrl: updated.avatar_url,
+      bio: updated.bio,
+      walletAddress: updated.wallet_address,
+      status: updated.status,
+      role: updated.role,
+      verificationStatus: updated.verification_status,
+      createdAt: updated.created_at,
     } });
   });
 
   router.get('/users/:username', (request, response) => {
-    const user = database.prepare(`SELECT id, username, display_name, avatar_url, bio,
-      verification_status, created_at FROM users WHERE username = ? COLLATE NOCASE AND status = 'active'`)
+    const user = database.prepare(`SELECT users.id, users.username, users.display_name, users.avatar_url, users.bio,
+      users.verification_status, users.created_at FROM users
+      JOIN profile_settings ON profile_settings.user_id = users.id
+      WHERE users.username = ? COLLATE NOCASE AND users.status = 'active' AND profile_settings.discoverable = 1`)
       .get(request.params.username) as {
         id: string; username: string; display_name: string; avatar_url: string | null;
         bio: string; verification_status: string; created_at: string;

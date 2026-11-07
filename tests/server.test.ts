@@ -20,6 +20,7 @@ afterEach(async () => {
 
 test('accounts persist securely and profile edits require an active session', async () => {
   const database = createDatabase(':memory:');
+  assert.deepEqual(database.prepare('SELECT name FROM schema_migrations').all(), [{ name: '001_foundation.sql' }]);
   const app = express();
   app.use(express.json());
   app.use('/api/auth', createAuthRouter({ database }));
@@ -59,6 +60,17 @@ test('accounts persist securely and profile edits require an active session', as
   const updated = await update.json() as { user: { displayName: string; bio: string } };
   assert.equal(updated.user.displayName, 'Ada Builds');
   assert.equal(updated.user.bio, 'Learning out loud.');
+
+  const publicProfileResponse = await fetch(`${baseUrl}/users/ada_gee`);
+  assert.equal(publicProfileResponse.status, 200);
+  const publicProfile = await publicProfileResponse.json() as { profile: Record<string, unknown> };
+  assert.equal(publicProfile.profile.displayName, 'Ada Builds');
+  assert.equal('email' in publicProfile.profile, false);
+
+  const registeredUser = database.prepare('SELECT id FROM users WHERE username = ?').get('ada_gee') as { id: string };
+  database.prepare('UPDATE profile_settings SET discoverable = 0 WHERE user_id = ?').run(registeredUser.id);
+  const privateProfileResponse = await fetch(`${baseUrl}/users/ada_gee`);
+  assert.equal(privateProfileResponse.status, 404);
 
   const wallet = await fetch(`${baseUrl}/me/wallet`, { headers: { Cookie: cookie } });
   assert.equal(wallet.status, 200);

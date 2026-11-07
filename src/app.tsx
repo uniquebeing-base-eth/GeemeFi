@@ -1,9 +1,9 @@
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './components/AuthContext.tsx';
 import { AppShell } from './components/AppShell.tsx';
 import { AuthPage, WelcomePage } from './pages/AuthPages.tsx';
 import {
-  BountiesPage, ExplorePage, FeedPage, LearnPage, NotificationsPage, ProfilePage, WalletPage,
+  BountiesPage, ExplorePage, FeedPage, LearnPage, NotificationsPage, ProfilePage, PublicProfilePage, WalletPage,
 } from './pages/Pages.tsx';
 
 export function App() {
@@ -23,6 +23,7 @@ export function App() {
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/wallet" element={<WalletPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/profile/:username" element={<PublicProfilePage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -39,5 +40,3 @@ function ProtectedApp() {
   if (!user) return <Navigate to={`/signin?next=${encodeURIComponent(location.pathname)}`} replace />;
   return <Outlet />;
 }
-
-import { Outlet } from 'react-router-dom';

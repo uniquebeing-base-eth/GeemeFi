@@ -2,7 +2,6 @@ import 'dotenv/config';
 import express from 'express';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { createServer as createViteServer } from 'vite';
 import { createDatabase } from './db.ts';
 import { createAuthRouter } from './routes/auth.ts';
 import { createProfileRouter } from './routes/profiles.ts';
@@ -30,6 +29,7 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(distPath));
   app.get('*splat', (_request, response) => response.sendFile(resolve(distPath, 'index.html')));
 } else {
+  const { createServer: createViteServer } = await import('vite');
   const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
   app.use(vite.middlewares);
 }

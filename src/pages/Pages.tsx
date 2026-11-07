@@ -3,7 +3,7 @@ import {
   ArrowRight, Bell, BookOpen, Check, Clock3, Compass, Gift, GraduationCap, Heart,
   HeartHandshake, Lightbulb, LockKeyhole, Search, ShieldCheck, Sparkles, UserRound, Wallet as WalletIcon,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { Avatar } from '../components/Avatar.tsx';
 import { useAuth } from '../components/AuthContext.tsx';
 import { api } from '../lib/api.ts';
@@ -106,6 +106,35 @@ export function ExplorePage() {
 
 function MemberRow({ member }: { member: Member }) {
   return <Link className="member-row" to={`/profile/${member.username}`}><Avatar name={member.displayName} src={member.avatarUrl} /><span className="member-copy"><b>{member.displayName}{member.verificationStatus === 'verified' && <ShieldCheck className="verified-mark" size={14} />}</b><small>@{member.username}</small><span>{member.bio || 'A new Gee in the community.'}</span></span><ArrowRight size={17} className="member-arrow" /></Link>;
+}
+
+type PublicProfile = Member & { followers: number; following: number; posts: number };
+
+export function PublicProfilePage() {
+  const { username = '' } = useParams();
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    api<{ profile: PublicProfile }>(`/users/${encodeURIComponent(username)}`)
+      .then((result) => { if (active) { setProfile(result.profile); setError(''); } })
+      .catch((issue) => { if (active) setError(issue instanceof Error ? issue.message : 'This profile could not be loaded.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [username]);
+
+  if (loading) return <div className="skeleton-stack" aria-label="Loading profile"><span /><span /><span /></div>;
+  if (error || !profile) return <><div className="page-heading"><div><div className="page-kicker">GEEMIFI COMMUNITY</div><h1>Profile not found</h1></div></div><ErrorPanel message={error || 'This profile is not available.'} /><Link className="text-link back-to-explore" to="/explore"><ArrowRight size={15} /> Back to Explore</Link></>;
+
+  return <>
+    <div className="page-heading"><div><div className="page-kicker">ONE OF THE GEES</div><h1>{profile.displayName}</h1><p>@{profile.username}</p></div><div className="heading-art-chip profile-heading-chip"><Avatar name={profile.displayName} src={profile.avatarUrl} /></div></div>
+    <section className="profile-preview"><div className="profile-cover"><span className="cover-spark cover-spark-one">✦</span><span className="cover-spark cover-spark-two">✧</span><span className="cover-caption">ONE OF THE GEES <b>✦</b></span></div><div className="profile-preview-body"><Avatar name={profile.displayName} src={profile.avatarUrl} size="large" /><div className="profile-preview-copy"><h2>{profile.displayName}{profile.verificationStatus === 'verified' && <ShieldCheck className="verified-mark" size={15} />}</h2><span>@{profile.username}</span><p>{profile.bio || 'A Gee, here to learn, build and give.'}</p><small>Joined {new Date(profile.createdAt).toLocaleDateString('en', { month: 'long', year: 'numeric' })}</small></div></div></section>
+    <div className="public-stats"><div><b>{profile.posts}</b><span>Posts</span></div><div><b>{profile.followers}</b><span>Followers</span></div><div><b>{profile.following}</b><span>Following</span></div></div>
+    <EmptyState icon={<Sparkles size={22} />} title="Their story is just beginning." body="Posts and shared work will appear here when the community feed opens." />
+  </>;
 }
 
 export function ProfilePage() {

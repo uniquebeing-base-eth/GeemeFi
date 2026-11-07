@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch server/index.ts",
     "build": "vite build && tsc --noEmit",
-    "start": "NODE_ENV=production tsx server/index.ts",
+    "start": "node server/index.ts",
     "check": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts"
   },
