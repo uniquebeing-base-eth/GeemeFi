@@ -11,13 +11,18 @@
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@goodsdks/citizen-sdk": "^1.2.7",
+    "@types/pg": "^8.23.1",
     "better-sqlite3": "^12.2.0",
     "dotenv": "^16.6.1",
     "express": "^5.1.0",
     "lucide-react": "^0.468.0",
+    "pg": "^8.23.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.2",
+    "thirdweb": "^5.122.1",
+    "viem": "^2.57.16",
     "zod": "^3.25.67"
   },
   "devDependencies": {
