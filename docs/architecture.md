@@ -29,7 +29,9 @@ Public profile responses use explicit field selection and never return email, pa
 
 - `GET /api/health`: liveness check.
 - `GET /api/auth/me`: current session or `null`.
-- `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`.
+- `POST /api/auth/register`, `POST /api/auth/verify-email`, `POST /api/auth/resend-verification`.
+- `POST /api/auth/forgot-password`, `POST /api/auth/reset-password`.
+- `POST /api/auth/login`, `POST /api/auth/logout`.
 - `GET /api/me`: authenticated user's profile.
 - `PATCH /api/me`: validate and persist profile edits.
 - `GET /api/users?q=...`, `GET /api/users/:username`: discoverable, privacy-safe public profiles.

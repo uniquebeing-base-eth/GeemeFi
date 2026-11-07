@@ -52,15 +52,24 @@ export function createDatabase(connectionString = process.env.DATABASE_URL): App
   return new PostgresDatabase(new Pool({ connectionString }));
 }
 
-export async function runMigrations(database: AppDatabase): Promise<void> {
-  await database.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
-    name TEXT PRIMARY KEY,
-    applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
-  )`);
+async function migrationNames(): Promise<string[]> {
   const migrationPath = fileURLToPath(new URL('./migrations/postgres/', import.meta.url));
-  const migrationNames = (await readdir(migrationPath)).filter((name) => name.endsWith('.sql')).sort();
+  return (await readdir(migrationPath)).filter((name) => name.endsWith('.sql')).sort();
+}
 
-  for (const name of migrationNames) {
+export async function runMigrations(database: AppDatabase): Promise<void> {
+  const migrationTable = await database.query<{ name: string | null }>(
+    "SELECT to_regclass('schema_migrations')::text AS name");
+  if (!migrationTable.rows[0]?.name) {
+    await database.query(`CREATE TABLE schema_migrations (
+      name TEXT PRIMARY KEY,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+  }
+  const migrationPath = fileURLToPath(new URL('./migrations/postgres/', import.meta.url));
+  const names = await migrationNames();
+
+  for (const name of names) {
     const applied = await database.query('SELECT 1 FROM schema_migrations WHERE name = $1', [name]);
     if (applied.rowCount) continue;
 
@@ -69,6 +78,20 @@ export async function runMigrations(database: AppDatabase): Promise<void> {
       await client.query(sql);
       await client.query('INSERT INTO schema_migrations (name) VALUES ($1)', [name]);
     });
+  }
+}
+
+export async function assertMigrationsCurrent(database: Queryable): Promise<void> {
+  const { rows: tableRows } = await database.query<{ name: string | null }>(
+    "SELECT to_regclass('schema_migrations')::text AS name");
+  if (!tableRows[0]?.name) {
+    throw new Error('PostgreSQL schema is not initialized. Run npm run db:migrate before starting Geemifi.');
+  }
+  const { rows } = await database.query<{ name: string }>('SELECT name FROM schema_migrations');
+  const applied = new Set(rows.map(({ name }) => name));
+  const pending = (await migrationNames()).filter((name) => !applied.has(name));
+  if (pending.length) {
+    throw new Error(`PostgreSQL migrations are pending (${pending.join(', ')}). Run npm run db:migrate before starting Geemifi.`);
   }
 }
 

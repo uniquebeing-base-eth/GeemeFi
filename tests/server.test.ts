@@ -1,9 +1,10 @@
+import 'dotenv/config';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { afterEach, test } from 'node:test';
 import express from 'express';
-import { createDatabase, runMigrations, type AppDatabase } from '../server/db.ts';
+import { assertMigrationsCurrent, createDatabase, runMigrations, type AppDatabase } from '../server/db.ts';
 import { createAuthRouter } from '../server/routes/auth.ts';
 import { createProfileRouter } from '../server/routes/profiles.ts';
 
@@ -26,6 +27,7 @@ test('accounts persist securely and profile edits require an active session', { 
     database,
   });
   await runMigrations(database);
+  await assertMigrationsCurrent(database);
   const app = express();
   app.use(express.json());
   app.use('/api/auth', createAuthRouter({
@@ -133,6 +135,11 @@ test('accounts persist securely and profile edits require an active session', { 
   const walletData = await wallet.json() as { balance: number; allowance: null };
   assert.equal(walletData.balance, 0);
   assert.equal(walletData.allowance, null);
+  const otherUserWallet = await database.withUser(randomUUID(), (client) => client.query(
+    'SELECT user_id FROM wallet_accounts WHERE user_id = $1', [rows[0].id]));
+  const { rows: roleRows } = await database.query<{ rolsuper: boolean; rolbypassrls: boolean }>(
+    'SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user');
+  if (!roleRows[0].rolsuper && !roleRows[0].rolbypassrls) assert.equal(otherUserWallet.rowCount, 0);
 
   const forgotPassword = await fetch(`${baseUrl}/auth/forgot-password`, {
     method: 'POST',

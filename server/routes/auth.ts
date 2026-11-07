@@ -155,6 +155,9 @@ export function createAuthRouter({ database, email = {
       if (!rows[0]) return false;
       await client.query('UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE id = $1',
         [rows[0].user_id]);
+      await client.query(`INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id)
+        VALUES ($1, $2, $3, $4, $5)`,
+      [randomUUID(), rows[0].user_id, 'account.email_verified', 'user', rows[0].user_id]);
       return true;
     });
     if (!verified) {

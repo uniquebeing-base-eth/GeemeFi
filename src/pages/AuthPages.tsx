@@ -175,7 +175,7 @@ export function ForgotPasswordPage() {
     setMessage('');
     try {
       await api('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
-      setMessage('If an account exists for this address, password reset instructions will arrive shortly.');
+      setMessage('If an account exists for this address, we will try to send reset instructions. If nothing arrives, you can safely request another link.');
     } catch (issue) {
       setMessage(issue instanceof Error ? issue.message : 'We could not process that request. Please try again.');
     } finally {
@@ -226,7 +226,7 @@ export function ResetPasswordPage() {
     <form className="auth-form" onSubmit={submit}>
       <label className="field-label">New password<div className="input-wrap"><LockKeyhole size={17} /><input name="password" type="password" autoComplete="new-password" minLength={8} maxLength={128} required /></div></label>
       <label className="field-label">Confirm password<div className="input-wrap"><LockKeyhole size={17} /><input name="confirmPassword" type="password" autoComplete="new-password" minLength={8} maxLength={128} required /></div></label>
-      {message && <div className={error ? 'form-error' : 'auth-success'} role="status">{message}</div>}
+      {message && <div className={error ? 'form-error' : 'auth-success'} role={error ? 'alert' : 'status'}>{message}</div>}
       {message.startsWith('Your password') ? <Link className="button button-primary auth-submit" to="/signin">Sign in</Link> : <button className="button button-primary auth-submit" type="submit" disabled={pending || !token}>{pending ? 'Updating…' : 'Update password'}</button>}
       {error && <Link to="/forgot-password">Request another reset link</Link>}
     </form>

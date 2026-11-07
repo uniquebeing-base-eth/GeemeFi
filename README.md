@@ -49,9 +49,10 @@ Set `PORT`, `DATABASE_URL`, `RESEND_API_KEY`, `EMAIL_FROM`, and `APP_BASE_URL` i
 server/
   db.ts                 PostgreSQL connection, transactions and migration runner
   index.ts              HTTP server, API registration and SPA hosting
+  email.ts              Branded Resend verification and reset messages
   security.ts            Passwords, sessions, origin checks and auth guards
   routes/
-    auth.ts              Registration, login, logout and current session
+    auth.ts              Registration, verification, recovery, login and sessions
     profiles.ts          Public profiles, profile updates and wallet summary
   migrations/postgres/   Ordered PostgreSQL migrations
 src/

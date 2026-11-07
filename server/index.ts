@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { createDatabase } from './db.ts';
+import { assertMigrationsCurrent, createDatabase } from './db.ts';
 import { createAuthRouter } from './routes/auth.ts';
 import { createProfileRouter } from './routes/profiles.ts';
 
@@ -10,6 +10,7 @@ const app = express();
 const port = Number(process.env.PORT ?? 5173);
 const database = createDatabase();
 await database.query('SELECT 1');
+await assertMigrationsCurrent(database);
 
 app.disable('x-powered-by');
 app.use((_request, response, next) => {
