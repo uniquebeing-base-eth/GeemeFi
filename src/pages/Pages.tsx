@@ -62,10 +62,9 @@ export function FeedPage() {
 }
 
 function WalletPeek() {
-  const [wallet, setWallet] = useState<Wallet | null>(null);
   const [error, setError] = useState(false);
   useEffect(() => {
-    api<Wallet>('/me/wallet').then(setWallet).catch(() => setError(true));
+    api<Wallet>('/me/wallet').catch(() => setError(true));
   }, []);
 
   return (
